@@ -1,0 +1,53 @@
+{
+    "area_properties": [
+      {
+        "area_id": "area_1",
+        "properties": {
+          "wind_velocity": [0.0, 0.0, 0.0],
+          "temperature": 10.5,
+          "sea_level_atm": 0.98
+        }
+      },
+      {
+        "area_id": "area_2",
+        "properties": {
+          "wind_velocity": [0.0, -1.0, 0.0],
+          "temperature": -15.0,
+          "sea_level_atm": 1.1
+        }
+      },
+      {
+        "area_id": "area_3",
+        "properties": {
+          "wind_velocity": [-1.0, 1.0, 0.0],
+          "temperature": 55.0,
+          "sea_level_atm": 0.8
+        }
+      },
+      {
+        "area_id": "area_4",
+        "properties": {
+          "wind_velocity": [-1.0, -1.0, 0.0],
+          "temperature": 55.0,
+          "sea_level_atm": 0.97
+        }
+      },
+      {
+        "area_id": "area_5",
+        "properties": {
+          "wind_velocity": [1.0, 1.0, 0.0],
+          "temperature": 55.0,
+          "sea_level_atm": 1.0
+        }
+      },
+      {
+        "area_id": "area_6",
+        "properties": {
+          "wind_velocity": [1.0, -1.0, 0.0],
+          "temperature": 55.0,
+          "sea_level_atm": 1.2
+        }
+      }
+    ]
+  }
+  
