@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Order Drone Delivery</title>
+<style>
+body{font-family:Arial;padding:20px;} 
+input[type=number]{width:50px;} 
+button{padding:10px;margin-top:10px;}
+#status{margin-top:20px;}
+</style>
+</head>
+<body>
+<h1>Order Drone Delivery</h1>
+
+<h2>料理選択</h2>
+オムライス: <input type="number" id="qty_omurice" value="0" min="0"><br>
+ハンバーグ: <input type="number" id="qty_hamburg" value="0" min="0"><br>
+おにぎり: <input type="number" id="qty_onigiri" value="0" min="0"><br>
+
+<h2>配達座標</h2>
+X: <input type="number" id="coord_x" value="10" step="0.1">
+Y: <input type="number" id="coord_y" value="10" step="0.1">
+Z: <input type="number" id="coord_z" value="0.5"><br>
+
+<button id="send_btn" onclick="sendOrder()">注文送信</button>
+
+<div id="status"><pre id="drone_state">Connecting...</pre></div>
+
+<script>
+const stateEl = document.getElementById('drone_state');
+const sendBtn = document.getElementById('send_btn');
+let orderSent = false;
+
+const ws = new WebSocket(`ws://${location.host}/Order/ws`);
+ws.onopen = () => stateEl.textContent = "Connected";
+ws.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    const s = data.state;
+    stateEl.textContent = `Drone状態: ${s.status}\nETA: ${s.eta!==null?s.eta.toFixed(1)+'s':'-'}`;
+
+    if(orderSent && s.status === "待機中"){
+        orderSent = false;
+        sendBtn.disabled = false;
+    }
+};
+
+async function sendOrder(){
+    if(orderSent){ alert("配達中のため次の注文は送信できません。"); return; }
+
+    const omurice = parseInt(document.getElementById('qty_omurice').value);
+    const hamburg = parseInt(document.getElementById('qty_hamburg').value);
+    const onigiri = parseInt(document.getElementById('qty_onigiri').value);
+    const coords = {
+        x: parseFloat(document.getElementById('coord_x').value),
+        y: parseFloat(document.getElementById('coord_y').value),
+        z: parseFloat(document.getElementById('coord_z').value)
+    };
+    if(omurice+hamburg+onigiri===0){ alert("料理を選択してください"); return; }
+
+    const res = await fetch('/register_order',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({omurice,hamburg,onigiri,coords})
+    });
+    const data = await res.json();
+    if(res.ok){
+        orderSent = true;
+        sendBtn.disabled = true;
+        alert(`注文登録完了 ID:${data.order_id}`);
+    } else {
+        alert(`エラー: ${data.error}`);
+    }
+}
+</script>
+</body>
+</html>

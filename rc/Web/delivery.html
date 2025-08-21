@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Delivery Dashboard</title>
+<style>
+body{font-family:Arial;padding:20px;}
+table{border-collapse:collapse;margin-bottom:20px;width:100%;}
+td,th{border:1px solid #ccc;padding:5px 10px;text-align:center;}
+button{padding:5px 10px;}
+#status{margin-top:20px;}
+</style>
+</head>
+<body>
+<h1>Delivery Dashboard</h1>
+
+<table id="orders_table">
+<tr><th>注文ID</th><th>オムライス</th><th>ハンバーグ</th><th>おにぎり</th><th>座標</th><th>配達</th></tr>
+</table>
+
+<div id="status"><pre id="drone_state">Connecting...</pre></div>
+
+<script>
+const ordersTable = document.getElementById('orders_table');
+const stateEl = document.getElementById('drone_state');
+let ordersList = {};
+
+const ws = new WebSocket(`ws://${location.host}/Delivery/ws`);
+ws.onopen = () => stateEl.textContent="Connected";
+
+ws.onmessage = (msg)=>{
+    const data = JSON.parse(msg.data);
+    const s = data.state;
+    stateEl.textContent = `状態: ${s.status}\nETA: ${s.eta!==null?s.eta.toFixed(1)+' sec':'-'}`;
+
+    // 注文追加
+    data.order.forEach(order=>{
+        if(order.id && !ordersList[order.id]){
+            ordersList[order.id] = order;
+            const row = ordersTable.insertRow();
+            row.id = `order_${order.id}`;
+            row.insertCell(0).innerText = order.id;
+            row.insertCell(1).innerText = order.omurice;
+            row.insertCell(2).innerText = order.hamburg;
+            row.insertCell(3).innerText = order.onigiri;
+            row.insertCell(4).innerText = `(${order.coords.x},${order.coords.y},${order.coords.z||0})`;
+            const btnCell = row.insertCell(5);
+            const btn = document.createElement('button');
+            btn.innerText = "配達開始";
+            btn.onclick = ()=> startDelivery(order,row.id);
+            btnCell.appendChild(btn);
+        }
+    });
+
+    // 削除済み注文を反映
+    for(const rowId in ordersList){
+        if(!data.order.find(o=>o.id===rowId)){
+            document.getElementById(`order_${rowId}`)?.remove();
+            delete ordersList[rowId];
+        }
+    }
+};
+
+async function startDelivery(order,rowId){
+    await fetch('/start_delivery',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({coords: order.coords, order_id: order.id})
+    });
+    const row=document.getElementById(rowId);
+    row.style.backgroundColor='#ddd';
+    row.querySelector('button').disabled=true;
+}
+</script>
+</body>
+</html>
