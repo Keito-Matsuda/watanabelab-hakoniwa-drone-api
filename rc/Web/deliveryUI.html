@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>調理端末 / Delivery Cooking Dashboard</title>
+  <style>
+    :root{
+      --bg:#f7f7f8;--card:#fff;--text:#111827;--muted:#6b7280;--primary:#2563eb;--primary-200:#93c5fd;--border:#e5e7eb;--danger:#ef4444;--ok:#16a34a;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text)}
+    .header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);border-bottom:1px solid var(--border)}
+    .header-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:1120px;margin:0 auto;padding:12px 16px}
+    .brand{font-weight:700}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:6px 10px;background:#fff}
+    .badge.default{background:#eef2ff;border-color:#c7d2fe}
+    .badge.secondary{background:#f3f4f6}
+    .dot{width:8px;height:8px;border-radius:999px;background:#9ca3af;display:inline-block}
+    .dot.ok{background:var(--ok)}
+    .muted{color:var(--muted)}
+
+    .container{max-width:1120px;margin:1cm auto 0; padding:16px} /* ヘッダー下で押しづらい対策 */
+
+    .alert{margin:12px 0;padding:10px 12px;border-radius:12px;border:1px solid #fed7aa;background:#fff7ed;color:#7c2d12}
+
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}}
+
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:12px;display:grid;gap:10px}
+    .card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .id{font-weight:700;word-break:break-all}
+    .sub{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+    .items{display:grid;gap:6px}
+    .item{display:flex;justify-content:space-between;gap:8px}
+    .checklist{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    .statusbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .seg{display:inline-flex;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .seg button{border:0;background:#fff;padding:8px 10px;cursor:pointer}
+    .seg button.active{background:#111827;color:#fff}
+
+    .buttons{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{border:1px solid var(--border);background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+    .btn.ghost{background:#f3f4f6}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+
+    .empty{padding:48px 0;text-align:center;color:var(--muted)}
+
+    /* toast */
+    #toasts{position:fixed;right:16px;top:16px;z-index:60;display:grid;gap:8px}
+    .toast{background:rgba(0,0,0,.85);color:#fff;padding:10px 12px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+
+    /* dialog */
+    .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50}
+    .backdrop.open{display:flex}
+    .dialog{background:#fff;border-radius:16px;max-width:420px;width:92vw;border:1px solid var(--border);box-shadow:0 24px 56px rgba(0,0,0,.2)}
+    .dialog .hd{padding:14px 16px;border-bottom:1px solid var(--border)}
+    .dialog .bd{padding:14px 16px}
+    .dialog .ft{padding:14px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+
+    /* top status */
+    .top-status{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0 0}
+    .pill{border-radius:999px;background:#eef2ff;padding:4px 10px;border:1px solid #c7d2fe;font-size:14px}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-inner">
+      <div class="row">
+        <div class="brand">調理端末</div>
+        <div class="row muted" id="nowwrap">
+          <span>🕒</span><span id="now">-</span>
+        </div>
+        <div class="row">
+          <span class="badge secondary">調理待ち: <b id="count-waiting">0</b></span>
+          <span class="badge default">調理中: <b id="count-cooking">0</b></span>
+          <span class="badge default">受け渡し準備: <b id="count-ready">0</b></span>
+        </div>
+      </div>
+      <div class="row">
+        <span id="conn-dot" class="dot"></span>
+        <span id="conn-text" class="muted">Connecting...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="net-alert" class="alert" style="display:none">接続が不安定です。操作は再接続後にお試しください。</div>
+
+    <div class="top-status">
+      <span class="pill">ドローン状態: <b id="drone-status">-</b></span>
+      <span class="pill">残りの目安待ち時間: <b id="drone-eta">-</b></span>
+    </div>
+
+    <div id="list" class="grid" aria-live="polite"></div>
+    <div id="empty" class="empty" style="display:none">注文はありません</div>
+  </div>
+
+  <div id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Confirm Dialog -->
+  <div id="dlg-backdrop" class="backdrop" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+    <div class="dialog">
+      <div class="hd"><b id="dlg-title">ドローン発進確認</b></div>
+      <div class="bd">
+        <div id="dlg-desc" class="muted">注文 <span id="dlg-order-id">-</span> のドローンを発進させますか？<br />発進後はキャンセルできません。</div>
+      </div>
+      <div class="ft">
+        <button class="btn" id="dlg-cancel">キャンセル</button>
+        <button class="btn primary" id="dlg-ok">発進する</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ------- 定数・メニュー（orderUI.htmlと同一の品目/価格）
+    const MENU = {
+      w1:{name:'ふわとろオムライス', price:500},
+      w2:{name:'肉厚ハンバーグ弁当', price:600},
+      w3:{name:'サクプリエビフライ弁当', price:700},
+      j1:{name:'幕の内弁当', price:600},
+      j2:{name:'豚の生姜焼き弁当', price:500},
+      j3:{name:'鯖の味噌煮弁当', price:700},
+      c1:{name:'油淋鶏弁当', price:700},
+      c2:{name:'麻婆豆腐弁当', price:500},
+      c3:{name:'回鍋肉弁当', price:600},
+    };
+
+    const DEST_LABEL = { D8:'8階', D7:'7階', D6:'6階', D5:'5階', P8:'エントランス' };
+    const JPY = n => new Intl.NumberFormat('ja-JP',{style:'currency', currency:'JPY'}).format(n||0);
+
+    // ------- ローカル状態
+    /**
+     * ordersMap[id] = {
+     *   server: { id, w1..c3, point:{dest_id} },
+     *   status: 'waiting'|'cooking'|'ready',
+     *   cookingCompleted: boolean,
+     *   packagingCompleted: boolean,
+     *   droneStatus: 'preparing'|'flying'|'delivered'|undefined,
+     *   createdAt: number (ms)
+     * }
+     */
+    const ordersMap = Object.create(null);
+
+    // ------- ユーティリティ
+    const $ = sel => document.querySelector(sel);
+    function toast(msg){
+      const wrap = $('#toasts');
+      const el = document.createElement('div');
+      el.className='toast'; el.textContent=msg; wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; },2200);
+      setTimeout(()=>{ if(el.parentNode){ el.parentNode.removeChild(el); } },2600); // 親存在ガード
+    }
+
+    function itemsFromServerOrder(o){
+      const items = [];
+      Object.keys(MENU).forEach(k=>{
+        const qty = parseInt(o[k]||0,10) || 0;
+        if(qty>0){ items.push({ id:k, name:MENU[k].name, price:MENU[k].price, qty }); }
+      });
+      return items;
+    }
+
+    function totals(items){
+      return items.reduce((s,it)=>s + it.price*it.qty, 0);
+    }
+
+    function destOf(o){
+      const id = o?.point?.dest_id; if(!id) return '-';
+      return `${DEST_LABEL[id]||id} (${id})`;
+    }
+
+    function statusCounts(){
+      let waiting=0,cooking=0,ready=0; 
+      Object.values(ordersMap).forEach(v=>{
+        if(v.status==='waiting') waiting++; else if(v.status==='cooking') cooking++; else if(v.status==='ready') ready++;
+      });
+      return {waiting,cooking,ready};
+    }
+
+    function updateHeaderCounts(){
+      const c = statusCounts();
+      $('#count-waiting').textContent = c.waiting;
+      $('#count-cooking').textContent = c.cooking;
+      $('#count-ready').textContent   = c.ready;
+    }
+
+    function render(){
+      const list = $('#list'); list.innerHTML='';
+      const entries = Object.values(ordersMap).sort((a,b)=>a.createdAt-b.createdAt);
+      $('#empty').style.display = entries.length===0 ? 'block' : 'none';
+      entries.forEach(entry=> list.appendChild(renderCard(entry)) );
+      updateHeaderCounts();
+    }
+
+    function renderCard(entry){
+      const { server:o, status, cookingCompleted, packagingCompleted } = entry;
+      const items = itemsFromServerOrder(o);
+      const total = totals(items);
+      const el = document.createElement('article'); el.className='card'; el.id = `card_${o.id}`;
+
+      // header
+      const head = document.createElement('div'); head.className='card-head';
+      const left = document.createElement('div');
+      left.innerHTML = `<div class="id">${o.id}</div>
+        <div class="sub"> <span>お届け先: ${destOf(o)}</span> <span>・</span> <span>${new Date(entry.createdAt).toLocaleTimeString('ja-JP')}</span> </div>`;
+      const right = document.createElement('div'); right.className='statusbar';
+      const seg = document.createElement('div'); seg.className='seg';
+      ['waiting','cooking','ready'].forEach(k=>{
+        const btn = document.createElement('button'); btn.textContent = (k==='waiting'?'調理待ち':k==='cooking'?'調理中':'受け渡し準備');
+        if(status===k) btn.classList.add('active');
+        btn.addEventListener('click',()=>{ entry.status=k; toast(`${o.id} を${btn.textContent}に更新しました`); render(); });
+        seg.appendChild(btn);
+      });
+      right.appendChild(seg);
+      head.appendChild(left); head.appendChild(right);
+
+      // items
+      const itemsWrap = document.createElement('div'); itemsWrap.className='items';
+      items.forEach(it=>{
+        const row = document.createElement('div'); row.className='item';
+        row.innerHTML = `<div>${it.name} × ${it.qty}</div><div>${JPY(it.price*it.qty)}</div>`;
+        itemsWrap.appendChild(row);
+      });
+      const totalRow = document.createElement('div'); totalRow.className='item'; totalRow.innerHTML = `<div style="font-weight:700">小計</div><div style="font-weight:700">${JPY(total)}</div>`;
+      itemsWrap.appendChild(totalRow);
+
+      // actions（先に用意してチェックから参照）
+      const actions = document.createElement('div'); actions.className='buttons';
+      const btnStart = document.createElement('button'); btnStart.className='btn ghost'; btnStart.textContent='調理開始';
+      btnStart.addEventListener('click',()=>{ entry.status='cooking'; toast(`${o.id} の調理を開始しました`); render(); });
+
+      const btnLaunch = document.createElement('button'); btnLaunch.className='btn primary'; btnLaunch.textContent='ドローン発進';
+      btnLaunch.disabled = !entry.packagingCompleted; // 梱包完了で有効
+      btnLaunch.addEventListener('click',()=> openConfirm(o.id));
+
+      actions.appendChild(btnStart); actions.appendChild(btnLaunch);
+
+      // checklist
+      const checklist = document.createElement('div'); checklist.className='checklist';
+      const c1 = document.createElement('label');
+      const c1input = document.createElement('input'); c1input.type='checkbox'; c1input.checked = !!cookingCompleted;
+      c1.appendChild(c1input); c1.append(' 調理完了');
+      const c2 = document.createElement('label');
+      const c2input = document.createElement('input'); c2input.type='checkbox'; c2input.checked = !!packagingCompleted;
+      c2.appendChild(c2input); c2.append(' 梱包完了');
+
+      c1input.addEventListener('change',e=>{
+        entry.cookingCompleted = !!e.target.checked;
+        render(); // 表示の同期が必要なら
+      });
+      c2input.addEventListener('change',e=>{
+        entry.packagingCompleted = !!e.target.checked;
+        btnLaunch.disabled = !entry.packagingCompleted; // 発進ボタンを即時反映
+      });
+
+      checklist.appendChild(c1); checklist.appendChild(c2);
+
+      el.appendChild(head); el.appendChild(itemsWrap); el.appendChild(checklist); el.appendChild(actions);
+      return el;
+    }
+
+    // ------- Confirm dialog & launch
+    let pendingOrderId = null;
+    function openConfirm(orderId){
+      pendingOrderId = orderId; $('#dlg-order-id').textContent = orderId; $('#dlg-backdrop').classList.add('open');
+    }
+    function closeConfirm(){ $('#dlg-backdrop').classList.remove('open'); pendingOrderId=null; }
+    $('#dlg-cancel').addEventListener('click', closeConfirm);
+    $('#dlg-ok').addEventListener('click', async ()=>{
+      if(!pendingOrderId) return;
+      try{
+        const res = await fetch('/start_delivery',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ order_id: pendingOrderId }) });
+        if(!res.ok) throw new Error('配達開始に失敗しました');
+        const entry = ordersMap[pendingOrderId];
+        if(entry){ entry.droneStatus='preparing'; }
+        toast(`${pendingOrderId} のドローンが発進しました`);
+      }catch(e){
+        toast('エラー: '+(e.message||e));
+      }finally{ closeConfirm(); render(); }
+    });
+
+    // ------- WebSocket接続（スロットリング＆フォールバック）
+    const connDot = $('#conn-dot'); const connText = $('#conn-text');
+    const netAlert = $('#net-alert');
+    const droneStatusEl = $('#drone-status'); const droneEtaEl = $('#drone-eta');
+
+    let ws = null; let reconnectAttempt = 0;
+    const WS_PATHS = ['/delivery/ws','/Delivery/ws','/ws']; // 優先順
+    const currentWsPath = () => WS_PATHS[reconnectAttempt % WS_PATHS.length];
+
+    // 描画スロットリング（WS高頻度更新対策）
+    let renderTimer = null;
+    function scheduleRender(delay=150){
+      if(renderTimer) return;
+      renderTimer = setTimeout(()=>{ renderTimer=null; render(); }, delay);
+    }
+
+    function connectWS(){
+      const proto = (location.protocol==='https:') ? 'wss' : 'ws';
+      const path = currentWsPath();
+      try{
+        ws = new WebSocket(`${proto}://${location.host}${path}`);
+      }catch(e){
+        scheduleReconnect();
+        return;
+      }
+
+      ws.onopen = ()=>{
+        connDot.classList.add('ok'); connText.textContent='接続中'; netAlert.style.display='none';
+        reconnectAttempt = 0; // 成功したらリセット
+      };
+      ws.onclose = ()=>{
+        connDot.classList.remove('ok'); connText.textContent='再接続中...'; netAlert.style.display='block';
+        scheduleReconnect();
+      };
+      ws.onerror = ()=>{
+        connDot.classList.remove('ok'); connText.textContent='エラー'; netAlert.style.display='block';
+      };
+      ws.onmessage = evt => {
+        try{
+          const data = JSON.parse(String(evt.data));
+          const s = data?.state || {};
+
+          // ドローン状態は直接更新（全体再描画しない）
+          droneStatusEl.textContent = (s.status ?? '-') + '';
+          droneEtaEl.textContent = (typeof s.eta==='number') ? (s.eta.toFixed(1)+'s') : '-';
+
+          // 新規注文/消滅を差分反映（orders / order 両対応）
+          const incoming = Array.isArray(data?.orders) ? data.orders :
+                           (Array.isArray(data?.order) ? data.order : []);
+          const liveIds = new Set(incoming.map(o=>o.id).filter(Boolean));
+
+          let changed = false;
+
+          // 追加・更新
+          incoming.forEach(o=>{
+            if(!o?.id) return;
+            const cur = ordersMap[o.id];
+            if(!cur){
+              ordersMap[o.id] = {
+                server:o,
+                status:'waiting',
+                cookingCompleted:false,
+                packagingCompleted:false,
+                droneStatus:undefined,
+                createdAt:Date.now()
+              };
+              changed = true;
+            }else{
+              const prev = cur.server || {};
+              const diff =
+                prev.w1!==o.w1 || prev.w2!==o.w2 || prev.w3!==o.w3 ||
+                prev.j1!==o.j1 || prev.j2!==o.j2 || prev.j3!==o.j3 ||
+                prev.c1!==o.c1 || prev.c2!==o.c2 || prev.c3!==o.c3 ||
+                (prev.point?.dest_id)!==(o.point?.dest_id);
+              if(diff){ cur.server = o; changed = true; }
+            }
+          });
+
+          // 消滅（配達完了）
+          Object.keys(ordersMap).forEach(id=>{
+            if(!liveIds.has(id)){
+              const wasFlying = ordersMap[id].droneStatus==='preparing' || ordersMap[id].droneStatus==='flying';
+              if(wasFlying){ toast(`${id} の配達が完了しました。`); }
+              delete ordersMap[id];
+              changed = true;
+            }
+          });
+
+          if(changed) scheduleRender(); // 差分があるときのみ描画
+        }catch(e){ console.warn('WS parse error', e); }
+      };
+    }
+
+    function scheduleReconnect(){
+      reconnectAttempt++;
+      const timeout = Math.min(10000, 1000 * Math.pow(2, reconnectAttempt));
+      setTimeout(connectWS, timeout);
+    }
+
+    connectWS();
+
+    // ------- 時刻表示
+    function tick(){ $('#now').textContent = new Date().toLocaleTimeString('ja-JP'); }
+    tick(); setInterval(tick, 1000);
+
+  </script>
+</body>
+</html>
