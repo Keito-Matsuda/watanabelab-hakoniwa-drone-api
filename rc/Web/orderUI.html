@@ -90,6 +90,24 @@
     .dest-select { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: #fff; }
     .dest-preview { font-size: 14px; }
     #dest-preview { display: none; }
+
+    /* Status progress bar */
+    .status { flex-wrap: wrap; }  /* 3つ目の子（progress）を下段に回す */
+    .status .progress {
+      flex-basis: 100%;
+      height: 8px;
+      margin-top: 12px;
+      background: var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .status .progress > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: var(--primary);
+      transition: width .3s ease;
+    }
   </style>
 </head>
 <body>
@@ -137,9 +155,10 @@
     <div class="status" aria-live="polite">
       <div><span id="conn-dot" class="dot"></span><span id="conn-text" class="muted">Connecting...</span></div>
       <div class="right">
-        <span>Drone状態: <b id="st-text">-</b></span>
-        <span style="margin-left:12px">ETA: <b id="eta-text">-</b></span>
+        <span>現在の配達状況　 <b id="st-text">-</b></span>
+        <span style="margin-left:12px">残りの目安待ち時間　 <b id="eta-text">-</b></span>
       </div>
+      <div class="progress"><span id="progress-bar"></span></div>
     </div>
 
     <section id="menu" class="grid" aria-label="メニュー一覧"></section>
@@ -359,6 +378,16 @@
     const connText = $('#conn-text');
     const stText = $('#st-text');
     const etaText = $('#eta-text');
+    const progressBar = document.getElementById('progress-bar'); 
+
+    // 状態→段階（0〜3）で簡易進捗に変換
+    const STATUS_STAGE = {
+      '待機中': 0,
+      '配達準備中': 1,
+      '配達開始': 2,
+      '配達中': 2.7,  //server側の方で配達中というステート作れる？
+      '配達完了': 3
+    };
 
     let ws;
     function connectWS() {
@@ -373,6 +402,10 @@
           if (s) {
             stText.textContent = s.status ?? '-';
             etaText.textContent = (typeof s.eta === 'number') ? `${s.eta.toFixed(1)}s` : '-';
+            if (progressBar) {
+              const stage = STATUS_STAGE[s.status] ?? 0;
+              progressBar.style.width = `${Math.min(100, Math.round(stage / 3 * 100))}%`;
+            }
             if (orderSent && s.status === '待機中') {
               orderSent = false;
               toast('配達が完了しました。次の注文が可能です。');
