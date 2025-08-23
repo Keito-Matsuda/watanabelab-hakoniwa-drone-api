@@ -241,8 +241,11 @@
 
     // ---------------------- メニュー描画 ----------------------
     function filterItems() {
-      return ITEMS.filter(it => (activeCategory === 'all' || it.category === activeCategory))
-                  .filter(it => !searchQuery || it.name.toLowerCase().includes(searchQuery) || it.description.toLowerCase().includes(searchQuery) || it.restaurant.toLowerCase().includes(searchQuery));
+      const norm = (s) => (s || '').toString().toLowerCase().normalize('NFKC'); // 半角全角を区別しない
+      const q = norm(searchQuery);
+      return ITEMS
+        .filter(it => q ? true : (activeCategory === 'all' || it.category === activeCategory))
+        .filter(it => !q || [norm(it.name), norm(it.description)].some(v => v.includes(q)));
     }
 
     function renderMenu() {
@@ -393,7 +396,7 @@
       const onigiri = qty('onigiri');
       if (omurice + hamburg + onigiri === 0) { toast('料理を選択してください'); return; }
 
-      const payload = { omurice, hamburg, onigiri, coords };
+      const payload = { omurice, hamburg, onigiri, point: { dest_id: destSelect.value }  };
       try {
         const res = await fetch('/register_order', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
