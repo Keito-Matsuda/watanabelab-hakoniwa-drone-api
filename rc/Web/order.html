@@ -4,24 +4,30 @@
 <meta charset="UTF-8">
 <title>Order Drone Delivery</title>
 <style>
-body{font-family:Arial;padding:20px;} 
-input[type=number]{width:50px;} 
-button{padding:10px;margin-top:10px;}
-#status{margin-top:20px;}
+body { font-family: Arial, sans-serif; padding: 20px; } 
+input[type=number]{ width: 50px; } 
+button{ padding:10px; margin-top:10px; }
+#status{ margin-top:20px; }
 </style>
 </head>
 <body>
 <h1>Order Drone Delivery</h1>
 
 <h2>料理選択</h2>
-オムライス: <input type="number" id="qty_omurice" value="0" min="0"><br>
-ハンバーグ: <input type="number" id="qty_hamburg" value="0" min="0"><br>
-おにぎり: <input type="number" id="qty_onigiri" value="0" min="0"><br>
+<div id="menu_list">
+  <label>オムライス: <input type="number" id="qty_omurice" value="0" min="0"></label><br>
+  <label>ハンバーグ: <input type="number" id="qty_hamburg" value="0" min="0"></label><br>
+  <label>おにぎり: <input type="number" id="qty_onigiri" value="0" min="0"></label><br>
+</div>
 
-<h2>配達座標</h2>
-X: <input type="number" id="coord_x" value="10" step="0.1">
-Y: <input type="number" id="coord_y" value="10" step="0.1">
-Z: <input type="number" id="coord_z" value="0.5"><br>
+<h2>配達地点番号</h2>
+<select id="delivery_point">
+    <option value="D5">5</option>
+    <option value="D6">6</option>
+    <option value="D7">7</option>
+    <option value="D8">8</option>
+    <option value="DF">F</option>
+</select><br>
 
 <button id="send_btn" onclick="sendOrder()">注文送信</button>
 
@@ -32,6 +38,7 @@ const stateEl = document.getElementById('drone_state');
 const sendBtn = document.getElementById('send_btn');
 let orderSent = false;
 
+// WebSocket でドローンの状態を受信
 const ws = new WebSocket(`ws://${location.host}/Order/ws`);
 ws.onopen = () => stateEl.textContent = "Connected";
 ws.onmessage = (msg) => {
@@ -45,24 +52,42 @@ ws.onmessage = (msg) => {
     }
 };
 
+// 注文送信処理
 async function sendOrder(){
-    if(orderSent){ alert("配達中のため次の注文は送信できません。"); return; }
+    if(orderSent){ 
+        alert("配達中のため次の注文は送信できません。"); 
+        return; 
+    }
 
-    const omurice = parseInt(document.getElementById('qty_omurice').value);
-    const hamburg = parseInt(document.getElementById('qty_hamburg').value);
-    const onigiri = parseInt(document.getElementById('qty_onigiri').value);
-    const coords = {
-        x: parseFloat(document.getElementById('coord_x').value),
-        y: parseFloat(document.getElementById('coord_y').value),
-        z: parseFloat(document.getElementById('coord_z').value)
-    };
-    if(omurice+hamburg+onigiri===0){ alert("料理を選択してください"); return; }
+    const point = document.getElementById('delivery_point').value;
+
+    // 料理を配列にまとめる
+    const items = [];
+    const menu = [
+        {id:"qty_omurice", name:"オムライス"},
+        {id:"qty_hamburg", name:"ハンバーグ"},
+        {id:"qty_onigiri", name:"おにぎり"},
+    ];
+
+    menu.forEach(m => {
+        const qty = parseInt(document.getElementById(m.id).value);
+        if(qty > 0) items.push({name: m.name, qty});
+    });
+
+    if(items.length === 0){ 
+        alert("料理を選択してください"); 
+        return; 
+    }
 
     const res = await fetch('/register_order',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({omurice,hamburg,onigiri,coords})
+        body:JSON.stringify({
+            orders: items,
+            point: {dest_id: point}
+        })
     });
+
     const data = await res.json();
     if(res.ok){
         orderSent = true;
