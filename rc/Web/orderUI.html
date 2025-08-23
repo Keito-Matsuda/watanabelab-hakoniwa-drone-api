@@ -45,7 +45,7 @@
     @media (max-width: 640px) { .coords { grid-template-columns: 1fr; } }
 
     /* Drone status */
-    .status { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border); background: var(--card); border-radius: 16px; padding: 12px; margin-top: 12px; }
+    .status { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border); background: var(--card); border-radius: 16px; padding: 12px; margin: 12px 0 1cm;  }
     .dot { width: 8px; height: 8px; border-radius: 999px; margin-right: 6px; display: inline-block; background: #9ca3af; }
     .dot.ok { background: var(--ok); }
     .status .right span { color: var(--muted); font-size: 14px; }
@@ -85,6 +85,11 @@
     /* Toasts */
     #toasts { position: fixed; right: 16px; top: 16px; z-index: 60; display: grid; gap: 8px; }
     .toast { background: rgba(0,0,0,.85); color: #fff; padding: 10px 12px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+
+    .dest { display: flex; align-items: center; gap: 12px; }
+    .dest-select { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: #fff; }
+    .dest-preview { font-size: 14px; }
+    #dest-preview { display: none; }
   </style>
 </head>
 <body>
@@ -109,11 +114,24 @@
       <button class="tab" data-cat="chinese" role="tab" aria-selected="false">中華</button>
     </div>
 
-    <div style="margin:8px 0 4px; font-weight:600; color:#374151">配達座標</div>
+    <!-- <div style="margin:8px 0 4px; font-weight:600; color:#374151">配達座標</div>
     <div class="coords" aria-label="配達座標入力">
       <label class="coord"><span>X</span><input id="coord-x" type="number" step="0.1" value="10" /></label>
       <label class="coord"><span>Y</span><input id="coord-y" type="number" step="0.1" value="10" /></label>
       <label class="coord"><span>Z</span><input id="coord-z" type="number" step="0.1" value="0.5" /></label>
+    </div> -->
+
+    <div style="margin:8px 0 4px; font-weight:600; color:#374151">お届け先</div>
+    <div class="dest" aria-label="お届け先選択">
+      <select id="destination" class="dest-select" aria-label="お届け先">
+        <option value="8F">8階</option>
+        <option value="7F">7階</option>
+        <option value="6F">6階</option>
+        <option value="5F">5階</option>
+        <option value="4F">4階</option>
+        <option value="ENTRANCE">エントランス</option>
+      </select>
+      <div class="dest-preview muted" id="dest-preview"></div>
     </div>
 
     <div class="status" aria-live="polite">
@@ -149,16 +167,26 @@
   <script>
     // ---------------------- データ ----------------------
     const ITEMS = [
-      { id: 'w1', name: 'ふわとろオムライス', description: '特製デミグラスソースの王道オムライス', price: 900, image: 'images/omelet_rice.png', rating: 4.6, deliveryTime: '20-30分', category: 'western'},
-      { id: 'w2', name: '肉厚ハンバーグ弁当', description: 'ジューシーでボリューム満点の手ごねハンバーグ', price: 1100, image: 'images/hamburger.png', rating: 4.7, deliveryTime: '25-35分', category: 'western'},
-      { id: 'w3', name: 'サクプリエビフライ弁当', description: '外はサクッ、中はプリッ、食感がたまらないシュリンプ', price: 1100, image: 'images/fried_shrimp.png', rating: 4.7, deliveryTime: '25-35分', category: 'western'},
-      { id: 'j1', name: '幕の内弁当', description: '塩鮭、煮物、玉子焼き、漬物のバランス和定番', price: 800, image: 'images/makunouchi.png', rating: 4.5, deliveryTime: '15-25分', category: 'japanese'},
-      { id: 'j2', name: '豚の生姜焼き弁当', description: '香ばしい生姜だれでジューシーに', price: 800, image: 'images/shogayaki.png', rating: 4.5, deliveryTime: '15-25分', category: 'japanese'},
-      { id: 'j3', name: '鯖の味噌煮弁当', description: 'ふっくら鯖を甘めの味噌だれで', price: 800, image: 'images/sabamiso.png', rating: 4.5, deliveryTime: '15-25分', category: 'japanese'},
-      { id: 'c1', name: '油淋鶏弁当', description: 'カリッと鶏に香味ねぎソース', price: 800, image: 'images/yu-rinti-.png', rating: 4.5, deliveryTime: '15-25分', category: 'chainese'},
-      { id: 'c2', name: '麻婆豆腐弁当', description: '花椒香る痺れとコク', price: 800, image: 'images/ma-bo-.png', rating: 4.5, deliveryTime: '15-25分', category: 'chinese'},
-      { id: 'c3', name: '回鍋肉弁当', description: '甘辛みそだれで豚バラとキャベツを炒め合わせ', price: 800, image: 'images/hoiko-ro-.png', rating: 4.5, deliveryTime: '15-25分', category: 'chinese'},
+      { id: 'w1', name: 'ふわとろオムライス', description: '特製デミグラスソースの王道オムライス', price: 500, image: 'images/omelet_rice.png', rating: 4.6, deliveryTime: '10-20分', category: 'western'},
+      { id: 'w2', name: '肉厚ハンバーグ弁当', description: 'ジューシーでボリューム満点の手ごねハンバーグ', price: 600, image: 'images/hamburger.png', rating: 4.7, deliveryTime: '15-25分', category: 'western'},
+      { id: 'w3', name: 'サクプリエビフライ弁当', description: '外はサクッ、中はプリッ、食感がたまらないシュリンぷり', price: 700, image: 'images/fried_shrimp.png', rating: 5.0, deliveryTime: '15-25分', category: 'western'},
+      { id: 'j1', name: '幕の内弁当', description: '塩鮭、煮物、玉子焼き、漬物のバランス和定番', price: 600, image: 'images/makunouchi.png', rating: 4.5, deliveryTime: '10-20分', category: 'japanese'},
+      { id: 'j2', name: '豚の生姜焼き弁当', description: '香ばしい生姜だれでジューシーに', price: 500, image: 'images/shogayaki.png', rating: 4.9, deliveryTime: '10-20分', category: 'japanese'},
+      { id: 'j3', name: '鯖の味噌煮弁当', description: 'ふっくら鯖を甘めの味噌だれで', price: 700, image: 'images/sabamiso.png', rating: 4.1, deliveryTime: '10-20分', category: 'japanese'},
+      { id: 'c1', name: '油淋鶏弁当', description: 'カリッと鶏に香味ねぎソース', price: 700, image: 'images/yu-rinti-.png', rating: 4.5, deliveryTime: '15-25分', category: 'chinese'},
+      { id: 'c2', name: '麻婆豆腐弁当', description: '花椒香る痺れとコク', price: 500, image: 'images/ma-bo-.png', rating: 4.0, deliveryTime: '10-20分', category: 'chinese'},
+      { id: 'c3', name: '回鍋肉弁当', description: '甘辛みそだれで豚バラとキャベツを炒め合わせ', price: 600, image: 'images/hoiko-ro-.png', rating: 3.9, deliveryTime: '10-20分', category: 'chinese'},
     ];
+
+    // 各お届け先のウェイポイント（例）※値は環境に合わせて調整してちょ
+    const WAYPOINTS = {
+      '8F':       { x: 10, y: 10, z: 18.0 }, 
+      '7F':       { x: 10, y: 10, z: 15.0 },
+      '6F':       { x: 10, y: 10, z: 12.0 },
+      '5F':       { x: 10, y: 10, z: 9.0  },
+      '4F':       { x: 10, y: 10, z: 6.0  },
+      'ENTRANCE': { x: 10, y: 10, z: 0.5  }  // 入口
+    };
 
     // ---------------------- 状態 ----------------------
     let activeCategory = 'all';
@@ -194,9 +222,22 @@
     });
 
     // ---------------------- 座標 ----------------------
-    $('#coord-x').addEventListener('input', e => coords.x = parseFloat(e.target.value) || 0);
-    $('#coord-y').addEventListener('input', e => coords.y = parseFloat(e.target.value) || 0);
-    $('#coord-z').addEventListener('input', e => coords.z = parseFloat(e.target.value) || 0);
+    // $('#coord-x').addEventListener('input', e => coords.x = parseFloat(e.target.value) || 0);
+    // $('#coord-y').addEventListener('input', e => coords.y = parseFloat(e.target.value) || 0);
+    // $('#coord-z').addEventListener('input', e => coords.z = parseFloat(e.target.value) || 0);
+
+    // ---------------------- お届け先（プルダウン） ----------------------
+    const destSelect  = $('#destination');
+    const destPreview = $('#dest-preview');
+    function applyDestination(key) {
+      const wp = WAYPOINTS[key];
+      if (!wp) return;
+      coords.x = wp.x; coords.y = wp.y; coords.z = wp.z;
+      destPreview.textContent = `座標 X:${coords.x} / Y:${coords.y} / Z:${coords.z}`;
+    }
+    // 初期反映＆変更監視
+    applyDestination(destSelect.value);
+    destSelect.addEventListener('change', (e) => applyDestination(e.target.value));
 
     // ---------------------- メニュー描画 ----------------------
     function filterItems() {
