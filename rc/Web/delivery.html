@@ -2,75 +2,477 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Delivery Dashboard</title>
+<title>ドローン配送フォーム</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
 <style>
-body{font-family:Arial;padding:20px;}
-table{border-collapse:collapse;margin-bottom:20px;width:100%;}
-td,th{border:1px solid #ccc;padding:5px 10px;text-align:center;}
-button{padding:5px 10px;}
-#status{margin-top:20px;}
+body {
+  font-family: 'Roboto', sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  height: 100vh;
+  background: #f5f5f5;
+}
+
+/* サイドナビ */
+.navbar {
+  width: 80px;
+  background: #1e1e1e;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 20px;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+}
+
+.nav-item {
+  width: 100%;
+  text-align: center;
+  padding: 20px 0;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.nav-item:hover {
+  background: #333;
+}
+
+.nav-item.active {
+  background: #299501;
+}
+
+.nav-item span {
+  position: absolute;
+  left: 90px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #fff;
+  color: #000;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: none;
+  white-space: nowrap;
+  font-size: 14px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.nav-item:hover span {
+  display: inline-block;
+}
+
+.nav-item.active:hover {
+  background: #299501;
+}
+
+/* メインコンテンツ */
+.content {
+  flex: 1;
+  padding: 20px;
+  overflow: auto;
+}
+
+/* テーブル装飾 */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  margin-bottom: 20px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+th, td {
+  padding: 12px 15px;
+  text-align: center;
+}
+
+td > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-bottom: 5px; 
+}
+
+th {
+  background: #299501;
+  color: #fff;
+  font-weight: 500;
+}
+
+tr:nth-child(even) {
+  background: #f9f9f9;
+}
+
+/* 行hover */
+table tr:hover:not(.gray) {
+  background-color: #f1f1f1;
+}
+
+/* ボタン */
+button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #087400;
+  color: #fff;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button:hover:not(:disabled) {
+  background-color: #0b9a00;
+}
+
+button:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
+}
+
+h2 {
+  margin-top: 0;
+  color: #333;
+}
+
+/* ドローン接続状態 */
+#status {
+  background: #fff;
+  padding: 10px 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  margin-top: 20px;
+  width: fit-content;
+  font-weight: 500;
+  color: #555;
+}
+
+/* 灰色化（配達中など） */
+.gray {
+  background-color: #ddd !important;
+}
+
+.gray button {
+  background-color: #aaa !important;
+  cursor: not-allowed;
+}
+
+.gray:hover {
+  background-color: #ddd !important;
+}
+
+.gray button:hover {
+  background-color: #aaa !important;
+}
+
 </style>
 </head>
 <body>
-<h1>Delivery Dashboard</h1>
 
-<table id="orders_table">
-<tr><th>注文ID</th><th>オムライス</th><th>ハンバーグ</th><th>おにぎり</th><th>座標</th><th>配達</th></tr>
-</table>
+<div class="navbar">
+  <div class="nav-item active" data-tab="orders_tab">&#128276;<span>新規注文</span></div>
+  <div class="nav-item" data-tab="cooking_tab">&#128666;<span>調理中</span></div>
+  <div class="nav-item" data-tab="ready_tab">&#128717;<span>準備完了</span></div>
+  <div class="nav-item" data-tab="complete_tab">&#128230;<span>完了済み</span></div>
+</div>
 
-<div id="status"><pre id="drone_state">Connecting...</pre></div>
+<div class="content">
+  <div id="orders_tab" class="tab-content">
+    <h2>新規注文</h2>
+    <table id="orders_table">
+      <tr><th>注文ID</th><th>料理</th><th>配達先</th><th>操作</th></tr>
+    </table>
+  </div>
+
+  <div id="cooking_tab" class="tab-content" style="display:none;">
+    <h2>調理中</h2>
+    <table id="cooking_table">
+      <tr><th>注文ID</th><th>料理</th><th>配達先</th><th>操作</th></tr>
+    </table>
+  </div>
+
+  <div id="ready_tab" class="tab-content" style="display:none;">
+    <h2>準備完了</h2>
+    <table id="ready_table">
+      <tr><th>注文ID</th><th>料理</th><th>配達先</th><th>操作</th></tr>
+    </table>
+  </div>
+
+  <div id="complete_tab" class="tab-content" style="display:none;">
+    <h2>完了済み</h2>
+    <table id="complete_table">
+      <tr><th>注文ID</th><th>料理</th><th>配達先</th></tr>
+    </table>
+  </div>
+
+  <div id="status"><pre id="drone_state">Connecting...</pre></div>
+</div>
 
 <script>
-const ordersTable = document.getElementById('orders_table');
+// ===== サイドナビ切り替え =====
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.style.display='none');
+    item.classList.add('active');
+    document.getElementById(item.dataset.tab).style.display='block';
+  });
+});
+
+// ===== WebSocket & 注文管理 =====
+const ordersTable   = document.getElementById('orders_table');
+const cookingTable  = document.getElementById('cooking_table');
+const readyTable    = document.getElementById('ready_table');
+const completeTable = document.getElementById('complete_table');
 const stateEl = document.getElementById('drone_state');
+
 let ordersList = {};
+let deliveryInProgress = false; // 配達中フラグ（グローバル）
 
 const ws = new WebSocket(`ws://${location.host}/Delivery/ws`);
 ws.onopen = () => stateEl.textContent="Connected";
 
+function statusMapping(status){
+    if(status==="new") return "order";
+    if(["cooking","cooked"].includes(status)) return "cooking";
+    if(["ready","delivering"].includes(status)) return "ready";
+    if(status==="complete") return "complete";
+    return "";
+}
+
+function updateOrderRow(order){
+    const status = order.status.toLowerCase();
+    ["order","cooking","ready","complete"].forEach(prefix=>{
+        const row = document.getElementById(`${prefix}_${order.id}`);
+        if(row && !prefix.includes(statusMapping(status))){ row.remove(); }
+    });
+
+    if(status==="new"){ if(!document.getElementById(`order_${order.id}`)) addOrderRow(order); }
+    else if(["cooking","cooked"].includes(status)){ if(!document.getElementById(`cooking_${order.id}`)) restoreCookingRow(order); }
+    else if(["ready","delivering"].includes(status)){ if(!document.getElementById(`ready_${order.id}`)) restoreReadyRow(order); }
+    else if(status==="complete"){ if(!document.getElementById(`complete_${order.id}`)) restoreCompleteRow(order); }
+}
+
 ws.onmessage = (msg)=>{
     const data = JSON.parse(msg.data);
     const s = data.state;
-    stateEl.textContent = `状態: ${s.status}\nETA: ${s.eta!==null?s.eta.toFixed(1)+' sec':'-'}`;
+    let roundedEta = s.eta !== null ? (Math.round(s.eta / 5) * 5) + 10 : null;
+    stateEl.textContent = `ドローン: ${s.status}\n\n配達完了まで約${roundedEta !== null ? roundedEta + ' 秒' : '-'}`;
 
-    // 注文追加
+
     data.order.forEach(order=>{
-        if(order.id && !ordersList[order.id]){
-            ordersList[order.id] = order;
-            const row = ordersTable.insertRow();
-            row.id = `order_${order.id}`;
-            row.insertCell(0).innerText = order.id;
-            row.insertCell(1).innerText = order.omurice;
-            row.insertCell(2).innerText = order.hamburg;
-            row.insertCell(3).innerText = order.onigiri;
-            row.insertCell(4).innerText = `(${order.coords.x},${order.coords.y},${order.coords.z||0})`;
-            const btnCell = row.insertCell(5);
-            const btn = document.createElement('button');
-            btn.innerText = "配達開始";
-            btn.onclick = ()=> startDelivery(order,row.id);
-            btnCell.appendChild(btn);
-        }
+        ordersList[order.id] = { ...order };
+        updateOrderRow(order);
     });
 
-    // 削除済み注文を反映
     for(const rowId in ordersList){
         if(!data.order.find(o=>o.id===rowId)){
-            document.getElementById(`order_${rowId}`)?.remove();
+            ["order","cooking","ready","complete"].forEach(prefix=>{ document.getElementById(`${prefix}_${rowId}`)?.remove(); });
             delete ordersList[rowId];
         }
     }
+
+    updateDeliveryButtons(); // 配達ボタン状態を更新
 };
 
-async function startDelivery(order,rowId){
+function updateDeliveryButtons() {
+    const readyRows = readyTable.querySelectorAll("tr");
+    
+    // Readyテーブル全体で配達中があるか確認
+    let anyDelivering = false;
+    readyRows.forEach(row => {
+        const orderId = row.id.split("_")[1];
+        const order = ordersList[orderId];
+        if(order && order.status.toLowerCase() === "delivering") anyDelivering = true;
+    });
+
+    // Readyテーブル全ボタンを更新
+    readyRows.forEach(row => {
+        const orderId = row.id.split("_")[1];
+        const order = ordersList[orderId];
+        const btn = row.querySelector("button");
+        if(!btn || !order) return;
+
+        // 配達中があれば全ボタン無効、完了済みも押せない
+        const isWaiting = stateEl.textContent.includes("待機中");
+        btn.disabled = !(isWaiting && !anyDelivering);
+
+        if(order.status.toLowerCase() === "delivering") row.classList.add('gray');
+        else row.classList.remove('gray');
+    });
+}
+
+
+// ===== 注文テーブル操作 =====
+function addOrderRow(order){
+    const row = ordersTable.insertRow();
+    row.id = `order_${order.id}`;
+    row.insertCell(0).innerText = order.id;
+    row.insertCell(1).innerHTML = order.orders.map(o => `${o.name} × ${o.qty}`).join("<br>");
+    row.insertCell(2).innerText = order.point.dest_id;
+
+    const btnCell = row.insertCell(3);
+    const btn = document.createElement('button');
+    btn.innerText = "受付";
+    btn.onclick = ()=> acceptOrder(order);
+    btnCell.appendChild(btn);
+}
+
+function notifyServer(orderId, status){
+    fetch('/update_order_status', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ order_id: orderId, status })
+    });
+}
+
+function acceptOrder(order){
+    const row = document.getElementById(`order_${order.id}`);
+    if(row) row.remove();
+    ordersList[order.id].status = "cooking";
+
+    const newRow = cookingTable.insertRow();
+    newRow.id = `cooking_${order.id}`;
+    newRow.insertCell(0).innerText = order.id;
+
+    const dishCell = newRow.insertCell(1);
+    order.orders.forEach(o=>{
+        const line = document.createElement('div');
+        line.textContent = `${o.name} × ${o.qty} `;
+        const b = document.createElement('button');
+        b.innerText = "調理完了";
+        b.onclick = ()=>{ b.disabled=true; checkCookingDone(order.id,newRow); };
+        line.appendChild(b);
+        dishCell.appendChild(line);
+    });
+
+    newRow.insertCell(2).innerText = order.point.dest_id;
+
+    const btnCell = newRow.insertCell(3);
+    const readyBtn = document.createElement('button');
+    readyBtn.innerText = "準備完了";
+    readyBtn.disabled = true;
+    readyBtn.onclick = ()=> readyOrder(order);
+    btnCell.appendChild(readyBtn);
+
+    ordersList[order.id].rowRef = newRow;
+    notifyServer(order.id, 'cooking');
+}
+
+function checkCookingDone(orderId,row){
+    const buttons = row.querySelectorAll("td:nth-child(2) button");
+    const allDone = [...buttons].every(b=>b.disabled);
+    if(allDone){
+        const readyBtn = row.querySelector("td:last-child button");
+        readyBtn.disabled = false;
+        notifyServer(orderId, 'cooked');
+    }
+}
+
+function readyOrder(order){
+    const row = document.getElementById(`cooking_${order.id}`);
+    if(row) row.remove();
+    ordersList[order.id].status = "ready";
+
+    const newRow = readyTable.insertRow();
+    newRow.id = `ready_${order.id}`;
+    newRow.insertCell(0).innerText = order.id;
+    newRow.insertCell(1).innerHTML = order.orders.map(o => `${o.name} × ${o.qty}`).join("<br>");
+    newRow.insertCell(2).innerText = order.point.dest_id;
+
+    const btnCell = newRow.insertCell(3);
+    const btn = document.createElement('button');
+    btn.innerText = "配達開始";
+    btn.disabled = deliveryInProgress; // 配達中なら押せない
+    btn.onclick = ()=> startDelivery(order,newRow);
+    btnCell.appendChild(btn);
+
+    notifyServer(order.id, 'ready');
+}
+
+// ===== 配達開始 =====
+async function startDelivery(order,row){
+    if(deliveryInProgress) return; // 既に配達中なら何もしない
+    deliveryInProgress = true;      // 配達開始でフラグON
+    row.classList.add('gray');
+    row.querySelector('button').disabled = true;
+    ordersList[order.id].status = "delivering";
+    notifyServer(order.id, 'delivering');
+
+    updateDeliveryButtons();
+
     await fetch('/start_delivery',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({coords: order.coords, order_id: order.id})
+        body:JSON.stringify({ order_id: order.id })
     });
-    const row=document.getElementById(rowId);
-    row.style.backgroundColor='#ddd';
-    row.querySelector('button').disabled=true;
+
+    // 配達完了後に deliveryInProgress = false に戻す
+    // 実際には WebSocket で状態を受け取るタイミングで resetDeliveryFlag() を呼ぶ
+}
+
+// 配達フラグリセット関数（配達完了時に呼ぶ想定）
+function resetDeliveryFlag(){
+    deliveryInProgress = false;
+    updateDeliveryButtons();
+}
+
+// ===== 復元用関数 =====
+function restoreCookingRow(order){
+    const newRow = cookingTable.insertRow();
+    newRow.id = `cooking_${order.id}`;
+    newRow.insertCell(0).innerText = order.id;
+    const dishCell = newRow.insertCell(1);
+    order.orders.forEach(o=>{
+        const line = document.createElement('div');
+        line.textContent = `${o.name} × ${o.qty} `;
+        const b = document.createElement('button');
+        b.innerText = "調理完了";
+        if(["cooked","ready","complete"].includes(order.status.toLowerCase())){
+            b.disabled = true;
+        } else {
+            b.onclick = ()=>{ b.disabled=true; checkCookingDone(order.id,newRow); };
+        }
+        line.appendChild(b);
+        dishCell.appendChild(line);
+    });
+    newRow.insertCell(2).innerText = order.point.dest_id;
+    const btnCell = newRow.insertCell(3);
+    const readyBtn = document.createElement('button');
+    readyBtn.innerText = "準備完了";
+    readyBtn.disabled = !(["cooked","ready"].includes(order.status.toLowerCase()));
+    readyBtn.onclick = ()=> readyOrder(order);
+    btnCell.appendChild(readyBtn);
+}
+
+function restoreReadyRow(order){
+    const newRow = readyTable.insertRow();
+    newRow.id = `ready_${order.id}`;
+    newRow.insertCell(0).innerText = order.id;
+    newRow.insertCell(1).innerHTML = order.orders.map(o => `${o.name} × ${o.qty}`).join("<br>");
+    newRow.insertCell(2).innerText = order.point.dest_id;
+
+    const btnCell = newRow.insertCell(3);
+    const btn = document.createElement('button');
+    btn.innerText = "配達開始";
+    btn.onclick = ()=> startDelivery(order, newRow);
+    btnCell.appendChild(btn);
+
+    // 初期状態も安全に更新
+    updateDeliveryButtons();
+}
+
+function restoreCompleteRow(order){
+    const newRow = completeTable.insertRow();
+    newRow.id = `complete_${order.id}`;
+    newRow.insertCell(0).innerText = order.id;
+    newRow.insertCell(1).innerHTML = order.orders.map(o => `${o.name} × ${o.qty}`).join("<br>");
+    newRow.insertCell(2).innerText = order.point.dest_id;
 }
 </script>
+
 </body>
 </html>
