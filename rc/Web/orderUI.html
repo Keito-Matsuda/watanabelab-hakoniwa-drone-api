@@ -142,12 +142,11 @@
     <div style="margin:8px 0 4px; font-weight:600; color:#374151">お届け先</div>
     <div class="dest" aria-label="お届け先選択">
       <select id="destination" class="dest-select" aria-label="お届け先">
-        <option value="8F">8階</option>
-        <option value="7F">7階</option>
-        <option value="6F">6階</option>
-        <option value="5F">5階</option>
-        <option value="4F">4階</option>
-        <option value="ENTRANCE">エントランス</option>
+        <option value="D8">8階</option>
+        <option value="D7">7階</option>
+        <option value="D6">6階</option>
+        <option value="D5">5階</option>
+        <option value="P8">エントランス</option>
       </select>
       <div class="dest-preview muted" id="dest-preview"></div>
     </div>
@@ -197,14 +196,13 @@
       { id: 'c3', name: '回鍋肉弁当', description: '甘辛みそだれで豚バラとキャベツを炒め合わせ', price: 600, image: 'images/hoiko-ro-.png', rating: 3.9, deliveryTime: '10-20分', category: 'chinese'},
     ];
 
-    // 各お届け先のウェイポイント（例）※値は環境に合わせて調整してちょ
+    // 各お届け先のウェイポイント
     const WAYPOINTS = {
-      '8F':       { x: 10, y: 10, z: 18.0 }, 
-      '7F':       { x: 10, y: 10, z: 15.0 },
-      '6F':       { x: 10, y: 10, z: 12.0 },
-      '5F':       { x: 10, y: 10, z: 9.0  },
-      '4F':       { x: 10, y: 10, z: 6.0  },
-      'ENTRANCE': { x: 10, y: 10, z: 0.5  }  // 入口
+      'D8':       { x: 22.25, y: -28, z: 4.4 }, 
+      'D7':       { x: 22.25, y: -28, z: 3.5 },
+      'D6':       { x: 22.25, y: -28, z: 2.7 },
+      'D5':       { x: 22.25, y: -28, z: 2.0 },
+      'P8':       { x: 20.00, y: -22, z: 0.5 }  // 入口
     };
 
     // ---------------------- 状態 ----------------------
@@ -424,12 +422,20 @@
       if (orderSent) { toast('配達中のため次の注文は送信できません'); return; }
       // ①のAPIに合わせて3品の数量を抽出
       const qty = id => (cart.get(id)?.quantity || 0);
-      const omurice = qty('omurice');
-      const hamburg = qty('hamburg');
-      const onigiri = qty('onigiri');
-      if (omurice + hamburg + onigiri === 0) { toast('料理を選択してください'); return; }
+      const w1 = qty('w1');
+      const w2 = qty('w2');
+      const w3 = qty('w3');
+      const j1 = qty('j1');
+      const j2 = qty('j2');
+      const j3 = qty('j3');
+      const c1 = qty('c1');
+      const c2 = qty('c2');
+      const c3 = qty('c3');
 
-      const payload = { omurice, hamburg, onigiri, point: { dest_id: destSelect.value }  };
+      const totalQty = w1 + w2 + w3 + j1 + j2 + j3 + c1 + c2 + c3;
+      if (totalQty === 0) { toast('料理を選択してください'); return; }
+
+      const payload = { w1, w2, w3, j1, j2, j3, c1, c2, c3, point: { dest_id: destSelect.value }  };
       try {
         const res = await fetch('/register_order', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
