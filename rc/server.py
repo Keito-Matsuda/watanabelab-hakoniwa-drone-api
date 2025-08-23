@@ -104,29 +104,22 @@ class DroneController:
         self.client.grab_baggage(True)
         time.sleep(2)
 
-        self.state["status"] = "配達開始"
-
         # JSONロードしてノード辞書取得
-        nodes = self.load_checkpoints("checkPoints.json")
+        nodes = self.load_checkpoints(checkpoints)
 
-        # ゴールID
         goal_id = order_manager.get_destination_id(order_id)
-
-        # スタート固定 P0
         start_id = "P0"
 
-        # A*で経路決定
         path_ids = self.astar(nodes, start_id, goal_id)
         
 
-
         if not path_ids:
-            print("経路が見つかりません", flush=True)
+            self.client.grab_baggage(False)
+            self.client.moveToPosition(0, 0, DEFAULT_HEIGHT, DEFAULT_SPEED)
+            self.client.land()
             self.state["status"] = "待機中"
             return
 
-        print("----航行経路決定----", flush=True)
-        print(path_ids, flush=True)
 
         # ETA更新用スレッド
         stop_eta = False
@@ -141,7 +134,7 @@ class DroneController:
 
         visited = [baggage_pos]  # 帰還用
 
-        # 経路順に移動
+        self.state["status"] = "配達開始"
         for nid in path_ids:
             target = nodes[nid]['pos']
             target_z = target.get('z', DEFAULT_HEIGHT)
@@ -151,6 +144,9 @@ class DroneController:
 
         # 配達完了
         self.client.grab_baggage(False)
+        stop_eta = True
+        t.join()
+        self.state["eta"] = None
         self.state["status"] = "配達完了"
         order_manager.complete_order(order_id)
         time.sleep(2)
@@ -167,8 +163,8 @@ class DroneController:
             time.sleep(1)
 
         self.client.moveToPosition(0, 0, DEFAULT_HEIGHT, DEFAULT_SPEED)
-        self.state["status"] = "待機中"
         self.client.land()
+        self.state["status"] = "待機中"
 
 # ==================== 注文管理 ====================
 class OrderManager:
@@ -177,18 +173,28 @@ class OrderManager:
 
     def register_order(self, data):
         order_id = str(uuid.uuid4())
+        
+        # orders配列を受け取り、そのまま保存
+        orders = []
+        for item in data.get("orders", []):
+            name = item.get("name")
+            qty = int(item.get("qty", 0))
+            if qty > 0 and name:  # 0以下は除外
+                orders.append({"name": name, "qty": qty})
+        
         self.orders[order_id] = {
             "id": order_id,
-            "omurice": int(data.get("omurice", 0)),
-            "hamburg": int(data.get("hamburg", 0)),
-            "onigiri": int(data.get("onigiri", 0)),
-            "point": data["point"]  # 配達先番号のみ
+            "orders": orders, 
+            "point": data["point"],
+            "status": "New"
         }
         return order_id
 
+
     def complete_order(self, order_id):
         if order_id in self.orders:
-            self.orders.pop(order_id)
+            self.orders[order_id]['status'] = "complete"
+
 
     def list_orders(self):
         return list(self.orders.values())
@@ -231,15 +237,32 @@ class DeliveryServer:
         if not order_id:
             return web.json_response({"error": "Invalid request"}, status=400)
 
-        checkpoints = self.drone.load_checkpoints("checkPoints.json")
 
         threading.Thread(
             target=self.drone.transport_multi,
-            args=({"x": 2, "y": 0, "z": DEFAULT_HEIGHT}, checkpoints, order_id, self.orders),
+            args=({"x": 2, "y": 0, "z": DEFAULT_HEIGHT}, "checkPoints.json", order_id, self.orders),
             daemon=True
         ).start()
 
         return web.json_response({"result": "delivery started"})
+    
+    async def update_order_status(self, request):
+        data = await request.json()
+        order_id = data.get("order_id")
+        status = data.get("status")
+
+        if not order_id or not status:
+            return web.json_response({"error": "Invalid request"}, status=400)
+
+        order = self.orders.orders.get(order_id)
+        if not order:
+            return web.json_response({"error": "Order not found"}, status=404)
+
+        # 状態更新
+        order["status"] = status
+
+        return web.json_response({"result": "ok"})
+
 
     async def websocket_handler_delivery(self, request):
         ws = web.WebSocketResponse()
@@ -296,6 +319,7 @@ class DeliveryServer:
         app.router.add_get('/Order/ws', self.websocket_handler_order)
         app.router.add_post('/register_order', self.register_order)
         app.router.add_post('/start_delivery', self.start_delivery)
+        app.router.add_post('/update_order_status', self.update_order_status)
         app.on_startup.append(self.start_background_tasks)
         app.on_cleanup.append(self.cleanup_background_tasks)
         return app
