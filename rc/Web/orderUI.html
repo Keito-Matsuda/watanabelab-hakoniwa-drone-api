@@ -68,8 +68,8 @@
     #float-cart { position: fixed; right: 24px; bottom: 24px; z-index: 30; border-radius: 999px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
 
     /* Drawer */
-    .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .2s; }
-    .drawer { position: fixed; top: 0; right: 0; height: 100%; width: 100%; max-width: 420px; background: #fff; transform: translateX(100%); transition: transform .25s; box-shadow: -8px 0 24px rgba(0,0,0,.1); display: flex; flex-direction: column; }
+    .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 60; }
+    .drawer { position: fixed; top: 0; right: 0; height: 100%; width: 100%; max-width: 420px; background: #fff; transform: translateX(100%); transition: transform .25s; box-shadow: -8px 0 24px rgba(0,0,0,.1); display: flex; flex-direction: column; z-index: 70; }
     .drawer.open { transform: translateX(0); }
     .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
     .drawer .head { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid var(--border); }
@@ -84,6 +84,8 @@
 
     /* Toasts */
     #toasts { position: fixed; right: 16px; top: 16px; z-index: 60; display: grid; gap: 8px; }
+    #toasts { pointer-events: none; }
+    #toasts .toast { pointer-events: auto; }
     .toast { background: rgba(0,0,0,.85); color: #fff; padding: 10px 12px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 
     .dest { display: flex; align-items: center; gap: 12px; }
@@ -120,6 +122,7 @@
           カート
           <span id="cart-badge" class="badge" hidden>0</span>
         </button>
+        <button id="open-history" class="btn" aria-label="履歴を開く">履歴</button>
       </div>
     </div>
   </header>
@@ -146,7 +149,7 @@
         <option value="D7">7階</option>
         <option value="D6">6階</option>
         <option value="D5">5階</option>
-        <option value="P8">エントランス</option>
+        <option value="DF">F</option>
       </select>
       <div class="dest-preview muted" id="dest-preview"></div>
     </div>
@@ -156,6 +159,7 @@
       <div class="right">
         <span>現在の配達状況　 <b id="st-text">-</b></span>
         <span style="margin-left:12px">残りの目安待ち時間　 <b id="eta-text">-</b></span>
+        <span style="margin-left:12px">注文ID: <b id="order-id">-</b></span>
       </div>
       <div class="progress"><span id="progress-bar"></span></div>
     </div>
@@ -177,6 +181,22 @@
       <div class="subtotal"><span>小計</span><span id="subtotal">¥0</span></div>
       <button id="checkout" class="btn primary" disabled>注文を確定する</button>
       <div id="order-note" class="muted" style="margin-top:6px; display:none">配達中は次の注文を送信できません。</div>
+    </div>
+  </aside>
+
+  <!-- Order history -->
+  <div id="history-backdrop" class="drawer-backdrop"></div>
+  <aside id="history" class="drawer" aria-label="履歴">
+    <div class="head">
+      <b>履歴</b>
+      <button id="close-history" class="btn">閉じる</button>
+    </div>
+    <div class="content">
+      <h3>注文受付履歴</h3>
+      <div id="history-placed"></div>
+
+      <h3 style="margin-top:16px">配達完了履歴</h3>
+      <div id="history-completed"></div>
     </div>
   </aside>
 
@@ -210,6 +230,44 @@
     let searchQuery = '';
     const cart = new Map(); // id -> { item, quantity }
     let orderSent = false;
+    // --- 履歴（画面右上「履歴」ドロワーに表示する用） ---
+    const historyPlaced = new Map();     // 未完：注文履歴
+    const historyCompleted = new Map();  // 完了：完了履歴
+    let lastOrderId = null;              // 直近に確定した注文ID（単一進行前提）
+
+    function renderHistory() {
+      const placed = document.getElementById('history-placed');
+      const completed = document.getElementById('history-completed');
+      if (!placed || !completed) return;
+
+      placed.innerHTML = '';
+      completed.innerHTML = '';
+
+      const mk = (id, v) => {
+        const total =
+          (v.w1|0)+(v.w2|0)+(v.w3|0)+(v.j1|0)+(v.j2|0)+(v.j3|0)+(v.c1|0)+(v.c2|0)+(v.c3|0);
+        const div = document.createElement('div');
+        div.style.padding = '6px 8px';
+        div.style.borderBottom = '1px solid #eee';
+        div.textContent =
+          `${new Date(v.ts).toLocaleTimeString()} #${id} → 宛先:${v.dest} / 合計${total}点`;
+        return div;
+      };
+
+      historyPlaced.forEach((v,id)=> placed.appendChild(mk(id,v)));
+      historyCompleted.forEach((v,id)=> completed.appendChild(mk(id,v)));
+    }
+
+    function moveToCompleted(doneId) {
+      if (!historyPlaced.has(doneId)) return;
+      const rec = historyPlaced.get(doneId);
+      historyPlaced.delete(doneId);
+      historyCompleted.set(doneId, rec);
+      if (lastOrderId === doneId) orderSent = false;
+      renderHistory();
+      toast(`注文 #${doneId} の配達が完了しました`);
+    }
+    let currentOrderId = null; // いま配達中の注文IDを保持
 
     const coords = { x: 10, y: 10, z: 0.5 };
 
@@ -226,6 +284,40 @@
     }
 
     function $(sel) { return document.querySelector(sel); }
+
+    // ---------- 履歴（localStorage） ----------
+    const HISTORY_KEY   = 'order-history-v1';
+    const COMPLETED_KEY = 'order-completed-v1';
+
+    function lsLoad(key){ try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; } }
+    function lsSave(key, arr){ localStorage.setItem(key, JSON.stringify(arr)); }
+
+    function addPlaced(entry){
+      const arr = lsLoad(HISTORY_KEY);
+      arr.unshift(entry);
+      lsSave(HISTORY_KEY, arr);
+    }
+
+    function updatePlacedStatus(orderId, status){
+      if(!orderId) return;
+      const arr = lsLoad(HISTORY_KEY);
+      const i = arr.findIndex(o => o.id === orderId);
+      if(i > -1){ arr[i].status = status; lsSave(HISTORY_KEY, arr); }
+    }
+
+    function markCompleted(orderId){
+      if(!orderId) return;
+      const placed = lsLoad(HISTORY_KEY);
+      const i = placed.findIndex(o => o.id === orderId);
+      let entry = { id: orderId };
+      if(i > -1){
+        entry = placed.splice(i, 1)[0];
+        lsSave(HISTORY_KEY, placed);
+      }
+      const comp = lsLoad(COMPLETED_KEY);
+      comp.unshift({ ...entry, status: '配達完了', completed_at: Date.now() });
+      lsSave(COMPLETED_KEY, comp);
+    }
 
     // ---------------------- 検索・タブ ----------------------
     $('#search').addEventListener('input', (e) => { searchQuery = e.target.value.trim().toLowerCase(); renderMenu(); });
@@ -371,6 +463,66 @@
     $('#close-cart').addEventListener('click', closeCart);
     backdrop.addEventListener('click', closeCart);
 
+    // --------- 既存：カートのopen/closeの後ろにこのブロックを追加 ---------
+    const historyDrawer   = document.getElementById('history');
+    const historyBackdrop = document.getElementById('history-backdrop');
+
+    function openHistory() {
+      // 片方だけ開く
+      closeCart();
+      historyDrawer.classList.add('open');
+      historyBackdrop.classList.add('open');
+      renderHistory(); // 未実装でもOK（下でダミー用意）
+    }
+    function closeHistory() {
+      historyDrawer.classList.remove('open');
+      historyBackdrop.classList.remove('open');
+    }
+
+    // クリックハンドラ
+    document.getElementById('open-history').addEventListener('click', openHistory);
+    document.getElementById('close-history').addEventListener('click', closeHistory);
+    historyBackdrop.addEventListener('click', closeHistory);
+
+    // 履歴描画（ひとまずダミーでも良い）
+    function renderHistory(){
+      const placed = lsLoad(HISTORY_KEY);
+      const completed = lsLoad(COMPLETED_KEY);
+
+      const placedEl = document.getElementById('history-placed');
+      const compEl   = document.getElementById('history-completed');
+
+      placedEl.innerHTML = placed.length ? '' : '<div class="muted">履歴はありません</div>';
+      compEl.innerHTML   = completed.length ? '' : '<div class="muted">まだ完了履歴はありません</div>';
+
+      placed.forEach(o => placedEl.appendChild(historyRow(o, false)));
+      completed.forEach(o => compEl.appendChild(historyRow(o, true)));
+    }
+
+    function historyRow(o, isCompleted){
+      const div = document.createElement('div');
+      div.style.border = '1px solid var(--border)';
+      div.style.borderRadius = '10px';
+      div.style.padding = '8px';
+      div.style.marginBottom = '8px';
+
+      const ts = new Date(isCompleted ? (o.completed_at||Date.now()) : (o.created_at||Date.now()));
+      const itemsText = Object.entries(o.items || {})
+        .filter(([,v]) => v > 0)
+        .map(([k,v]) => `${k}:${v}`)
+        .join(' / ') || '—';
+
+      div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+          <div><b>${o.id ?? '-'}</b> ・ ${o.dest_label ?? o.dest_id ?? ''}</div>
+          <div class="muted">${ts.toLocaleString()}</div>
+        </div>
+        <div class="muted" style="margin-top:4px">${itemsText}</div>
+        <div style="margin-top:4px">${isCompleted ? '配達完了' : (o.status || '—')}</div>
+      `;
+      return div;
+    }
+
     // ---------------------- WebSocket（①仕様） ----------------------
     const connDot = $('#conn-dot');
     const connText = $('#conn-text');
@@ -400,15 +552,37 @@
           if (s) {
             stText.textContent = s.status ?? '-';
             etaText.textContent = (typeof s.eta === 'number') ? `${s.eta.toFixed(1)}s` : '-';
+            if (currentOrderId) document.getElementById('order-id').textContent = currentOrderId;
+            updatePlacedStatus(currentOrderId, s.status);
+            renderHistory();
             if (progressBar) {
               const stage = STATUS_STAGE[s.status] ?? 0;
               progressBar.style.width = `${Math.min(100, Math.round(stage / 3 * 100))}%`;
             }
-            if (orderSent && s.status === '待機中') {
-              orderSent = false;
-              toast('配達が完了しました。次の注文が可能です。');
-              renderCart();
+          if (s) {
+            stText.textContent = s.status ?? '-';
+            etaText.textContent = (typeof s.eta === 'number') ? `${s.eta.toFixed(1)}s` : '-';
+
+            if (currentOrderId) updatePlacedStatus(currentOrderId, s.status);
+
+            if (progressBar) {
+              const stage = STATUS_STAGE[s.status] ?? 0;
+              progressBar.style.width = `${Math.min(100, Math.round(stage / 3 * 100))}%`;
             }
+
+            // ✅ 完了処理は「配達完了」のときだけ行う
+            if (currentOrderId && s.status === '配達完了') {
+              markCompleted(currentOrderId);
+              toast(`注文 #${currentOrderId} の配達が完了しました`);
+              orderSent = false;
+              currentOrderId = null;
+              document.getElementById('order-id').textContent = '-';
+              if (progressBar) progressBar.style.width = '0%';
+              
+              renderCart();
+              renderHistory();
+            }
+          }           
           }
         } catch (e) {
           console.warn('WS parse error', e);
@@ -443,6 +617,38 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'サーバーエラー');
         orderSent = true;
+        cart.clear(); // 送信後にカートをクリア
+        renderCart();
+        toast('注文を送信しました。配達が開始されるまでしばらくお待ちください。');
+        closeCart();  
+
+        if (data.order_id) {
+          lastOrderId = data.order_id;
+          document.getElementById('order-id').textContent = data.order_id;
+          historyPlaced.set(data.order_id, {
+            ts: Date.now(),
+            dest: destSelect.value,
+            dest_label: destSelect.options[destSelect.selectedIndex].textContent,
+            w1, w2, w3, j1, j2, j3, c1, c2, c3
+          });
+        }
+
+        currentOrderId = data.order_id ?? null;
+        document.getElementById('order-id').textContent = currentOrderId ?? '-';
+
+        // 履歴に保存（数量・宛先名・合計数）
+        const destLabel = destSelect.options[destSelect.selectedIndex].textContent;
+        const items = { w1, w2, w3, j1, j2, j3, c1, c2, c3 };
+        addPlaced({
+          id: currentOrderId,
+          created_at: Date.now(),
+          dest_id: destSelect.value,
+          dest_label: destLabel,
+          items,
+          total_items: totalQty,
+          status: '注文受付'
+        });
+        renderHistory();
         cart.clear();
         renderCart();
         toast(`注文登録完了 ID: ${data.order_id ?? '-'}`);
