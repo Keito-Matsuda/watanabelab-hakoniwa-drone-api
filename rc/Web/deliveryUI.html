@@ -55,10 +55,14 @@
     /* dialog */
     .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50}
     .backdrop.open{display:flex}
-    .dialog{background:#fff;border-radius:16px;max-width:420px;width:92vw;border:1px solid var(--border);box-shadow:0 24px 56px rgba(0,0,0,.2)}
+    .dialog{background:#fff;border-radius:16px;max-width:520px;width:92vw;border:1px solid var(--border);box-shadow:0 24px 56px rgba(0,0,0,.2)}
+   
     .dialog .hd{padding:14px 16px;border-bottom:1px solid var(--border)}
     .dialog .bd{padding:14px 16px}
     .dialog .ft{padding:14px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+    .hist-table{width:100%;border-collapse:collapse;font-size:14px}
+    .hist-table th,.hist-table td{border-bottom:1px solid var(--border);padding:8px 6px;text-align:left;vertical-align:top}
+    .hist-table th{background:#f9fafb}
 
     /* top status */
     .top-status{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0 0}
@@ -77,6 +81,7 @@
           <span class="badge secondary">調理待ち: <b id="count-waiting">0</b></span>
           <span class="badge default">調理中: <b id="count-cooking">0</b></span>
           <span class="badge default">受け渡し準備: <b id="count-ready">0</b></span>
+          <button class="btn" id="btn-history" title="配達完了の履歴を表示">完了履歴</button>
         </div>
       </div>
       <div class="row">
@@ -114,6 +119,28 @@
     </div>
   </div>
 
+  <!-- History Dialog -->
+  <div id="hist-backdrop" class="backdrop" role="dialog" aria-modal="true" aria-labelledby="hist-title">
+    <div class="dialog">
+      <div class="hd">
+        <b id="hist-title">完了履歴</b>
+        <button class="btn" id="hist-clear" title="履歴をすべて削除">クリア</button>
+      </div>
+      <div class="bd">
+        <table class="hist-table" id="hist-table">
+          <thead>
+            <tr><th>完了時刻</th><th>注文ID</th><th>お届け先</th><th>合計</th></tr>
+          </thead>
+          <tbody id="hist-tbody"></tbody>
+        </table>
+        <div id="hist-empty" class="muted" style="padding:8px 4px;">履歴はありません</div>
+      </div>
+      <div class="ft">
+        <button class="btn" id="hist-close">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ------- 定数・メニュー（orderUI.htmlと同一の品目/価格）
     const MENU = {
@@ -143,6 +170,9 @@
      * }
      */
     const ordersMap = Object.create(null);
+    // 配達完了の履歴（必要なら localStorage 永続化も可）
+    /** history = [{ id, dest, total, finishedAt }] */
+    const history = [];
 
     // ------- ユーティリティ
     const $ = sel => document.querySelector(sel);
@@ -211,11 +241,20 @@
       ['waiting','cooking','ready'].forEach(k=>{
         const btn = document.createElement('button'); btn.textContent = (k==='waiting'?'調理待ち':k==='cooking'?'調理中':'受け渡し準備');
         if(status===k) btn.classList.add('active');
-        btn.addEventListener('click',()=>{ entry.status=k; toast(`${o.id} を${btn.textContent}に更新しました`); render(); });
+        btn.addEventListener('click',()=>{
+        entry.status = k;
+        // ステータス直接変更時の同期：
+        // ready → 両チェックON、waiting → 両チェックOFF
+        if(k==='ready'){ entry.cookingCompleted = true; entry.packagingCompleted = true; }
+        if(k==='waiting'){ entry.cookingCompleted = false; entry.packagingCompleted = false; }
+        toast(`${o.id} を${btn.textContent}に更新しました`);
+        render();
+      });
         seg.appendChild(btn);
       });
       right.appendChild(seg);
-      head.appendChild(left); head.appendChild(right);
+      head.appendChild(left); 
+      head.appendChild(right);
 
       // items
       const itemsWrap = document.createElement('div'); itemsWrap.className='items';
@@ -233,32 +272,51 @@
       btnStart.addEventListener('click',()=>{ entry.status='cooking'; toast(`${o.id} の調理を開始しました`); render(); });
 
       const btnLaunch = document.createElement('button'); btnLaunch.className='btn primary'; btnLaunch.textContent='ドローン発進';
-      btnLaunch.disabled = !entry.packagingCompleted; // 梱包完了で有効
+      btnLaunch.disabled = !(entry.cookingCompleted && entry.packagingCompleted); // 梱包完了で有効
       btnLaunch.addEventListener('click',()=> openConfirm(o.id));
 
       actions.appendChild(btnStart); actions.appendChild(btnLaunch);
 
       // checklist
       const checklist = document.createElement('div'); checklist.className='checklist';
-      const c1 = document.createElement('label');
-      const c1input = document.createElement('input'); c1input.type='checkbox'; c1input.checked = !!cookingCompleted;
-      c1.appendChild(c1input); c1.append(' 調理完了');
-      const c2 = document.createElement('label');
-      const c2input = document.createElement('input'); c2input.type='checkbox'; c2input.checked = !!packagingCompleted;
-      c2.appendChild(c2input); c2.append(' 梱包完了');
+      if(entry.status==='cooking' || entry.status==='ready'){
+        const c1 = document.createElement('label');
+        const c1input = document.createElement('input'); c1input.type='checkbox'; c1input.checked = !!entry.cookingCompleted;
+        c1.appendChild(c1input); c1.append(' 調理完了');
 
-      c1input.addEventListener('change',e=>{
-        entry.cookingCompleted = !!e.target.checked;
-        render(); // 表示の同期が必要なら
-      });
-      c2input.addEventListener('change',e=>{
-        entry.packagingCompleted = !!e.target.checked;
-        btnLaunch.disabled = !entry.packagingCompleted; // 発進ボタンを即時反映
-      });
+        const c2 = document.createElement('label');
+        const c2input = document.createElement('input'); c2input.type='checkbox'; c2input.checked = !!entry.packagingCompleted;
+        c2.appendChild(c2input); c2.append(' 梱包完了');
 
-      checklist.appendChild(c1); checklist.appendChild(c2);
+        function syncAfterCheck(){
+          // 両方チェックで受け渡し準備へ自動遷移
+          if(entry.cookingCompleted && entry.packagingCompleted){
+            if(entry.status!=='ready'){
+              entry.status='ready';
+              toast(`${o.id} を受け渡し準備に更新しました`);
+            }
+          }
+          // 発進ボタン活性/非活性
+          btnLaunch.disabled = !(entry.cookingCompleted && entry.packagingCompleted);
+          render(); // 表示同期
+        }
 
-      el.appendChild(head); el.appendChild(itemsWrap); el.appendChild(checklist); el.appendChild(actions);
+        c1input.addEventListener('change',e=>{
+          entry.cookingCompleted = !!e.target.checked;
+          syncAfterCheck();
+        });
+        c2input.addEventListener('change',e=>{
+          entry.packagingCompleted = !!e.target.checked;
+          syncAfterCheck();
+        });
+
+        checklist.appendChild(c1); checklist.appendChild(c2);
+      }
+
+      el.appendChild(head);
+      el.appendChild(itemsWrap);
+      if(checklist.childElementCount>0) el.appendChild(checklist);
+      el.appendChild(actions);
       return el;
     }
 
@@ -281,6 +339,47 @@
         toast('エラー: '+(e.message||e));
       }finally{ closeConfirm(); render(); }
     });
+
+    // ------- 履歴ダイアログ
+    const histBackdrop = document.getElementById('hist-backdrop');
+    const histTbody    = document.getElementById('hist-tbody');
+    const histEmpty    = document.getElementById('hist-empty');
+
+    function openHistory(){
+      renderHistory();
+      histBackdrop.classList.add('open');
+    }
+    function closeHistory(){
+      histBackdrop.classList.remove('open');
+    }
+    function renderHistory(){
+      histTbody.innerHTML = '';
+      if(history.length === 0){
+        histEmpty.style.display = 'block';
+        return;
+      }
+      histEmpty.style.display = 'none';
+      history.slice().reverse().forEach(h=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${new Date(h.finishedAt).toLocaleString('ja-JP')}</td>
+          <td>${h.id}</td>
+          <td>${h.dest}</td>
+          <td>${JPY(h.total)}</td>
+        `;
+        histTbody.appendChild(tr);
+      });
+    }
+
+    // ボタンと連携
+    document.getElementById('btn-history').addEventListener('click', openHistory);
+    document.getElementById('hist-close').addEventListener('click', closeHistory);
+    document.getElementById('hist-clear').addEventListener('click', ()=>{
+      history.length = 0;
+      renderHistory();
+      toast('履歴をクリアしました');
+    });
+
 
     // ------- WebSocket接続（スロットリング＆フォールバック）
     const connDot = $('#conn-dot'); const connText = $('#conn-text');
@@ -363,12 +462,24 @@
           // 消滅（配達完了）
           Object.keys(ordersMap).forEach(id=>{
             if(!liveIds.has(id)){
-              const wasFlying = ordersMap[id].droneStatus==='preparing' || ordersMap[id].droneStatus==='flying';
-              if(wasFlying){ toast(`${id} の配達が完了しました。`); }
+              // 完了履歴へ追加（削除前に情報を取得）
+              const cur = ordersMap[id];
+              if(cur){
+                const items = itemsFromServerOrder(cur.server);
+                history.push({
+                  id,
+                  dest: destOf(cur.server),
+                  total: totals(items),
+                  finishedAt: Date.now()
+                });
+                const wasFlying = cur.droneStatus==='preparing' || cur.droneStatus==='flying';
+                if(wasFlying){ toast(`${id} の配達が完了しました。`); }
+              }
               delete ordersMap[id];
               changed = true;
             }
           });
+
 
           if(changed) scheduleRender(); // 差分があるときのみ描画
         }catch(e){ console.warn('WS parse error', e); }
